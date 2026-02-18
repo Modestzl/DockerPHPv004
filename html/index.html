@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx в Docker</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>🚀 Nginx работает в Docker!</h1>
+        <img src="assets/img/logo.png" alt="Logo" class="logo">
+    </header>
+
+    <main>
+        <section class="info">
+            <h2>Информация о сервере</h2>
+            <ul>
+                <li><strong>Сервер:</strong> <?php echo $_SERVER['SERVER_SOFTWARE']; ?></li>
+                <li><strong>IP адрес:</strong> <?php echo $_SERVER['SERVER_ADDR']; ?></li>
+                <li><strong>Время сервера:</strong> <?php echo date('Y-m-d H:i:s'); ?></li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; <?php echo date('Y'); ?> Nginx Docker Project</p>
+    </footer>
+</div>
+</body>
+</html>
