@@ -1,14 +1,52 @@
-# syntax=docker/dockerfile:1
+# Многостадийная сборка для оптимизации
+FROM php:8.2-fpm-alpine AS builder
 
-# ---- Этап 1: Базовый образ с PHP и расширениями ----
-FROM php:8.2-fpm-bookworm AS php-base
+# Устанавливаем системные зависимости
+# Важно: Обновляем индекс и удаляем кэш в одной команде, чтобы не плодить слои
+# RUN apk update && apk add --no-cache curl vim
+# Флаг --no-cache означает, что не нужно сохранять индекс пакетов локально
 
-# Устанавливаем расширения через удобную утилиту
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
-RUN install-php-extensions opcache pdo_mysql zip bcmath intl
+RUN apk update && apk add --no-cache \
+    git \
+    curl \
+    zlib-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    icu-dev \
+    oniguruma-dev \
+    postgresql-dev \
+    libxml2-dev \
+    libxslt-dev \
+    && rm -rf /var/cache/apk/*
+    #  && rm -rf /var/lib/apt/lists/* # Очищаем кэш apt в том же слое
+# Утилита mlocati/docker-php-extension-installer автоматически управляет установкой зависимостей и их последующей очисткой
+# Устанавливаем расширения PHP
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-configure intl && \
+    docker-php-ext-install \
+        pdo_mysql \
+        pdo_pgsql \
+        mysqli \
+        zip \
+        gd \
+        intl \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        soap \
+        sockets \
+        opcache \
+        xsl
 
-# ---- Этап 2: Сборка зависимостей Composer ----
-FROM php-base AS vendor
+# Устанавливаем Redis и другие PECL расширения
+RUN pecl install redis && \
+    pecl install apcu && \
+    pecl install igbinary && \
+    docker-php-ext-enable redis apcu igbinary
+
 
 # Копируем Composer из официального образа
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -17,18 +55,57 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-interaction --no-autoloader --no-scripts
 
-# ---- Этап 3: Финальный образ ----
-FROM php-base AS final
 
-# Копируем готовые vendor зависимости с предыдущего этапа
-COPY --from=vendor --chown=www-data:www-data /app/vendor /var/www/html/vendor
+# Финальный образ
+FROM php:8.3-fpm-alpine
 
-# Копируем код приложения (меняется чаще всего, поэтому в самом конце)
-COPY --chown=www-data:www-data . /var/www/html
+# Копируем установленные расширения из builder
+COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 
-# Копируем пользовательский php.ini, если нужно
-COPY php.ini /usr/local/etc/php/php.ini
+# Устанавливаем системные зависимости для продакшена
+RUN apk add --no-cache \
+    libzip \
+    libpng \
+    libjpeg-turbo \
+    freetype \
+    icu \
+    oniguruma \
+    postgresql-libs \
+    libxml2 \
+    libxslt \
+    tzdata \
+    supervisor
 
+# Настройка PHP-FPM для высоких нагрузок
+RUN echo "pm = dynamic" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo "pm.max_children = 50" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo "pm.start_servers = 5" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo "pm.min_spare_servers = 5" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo "pm.max_spare_servers = 35" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo "pm.max_requests = 500" >> /usr/local/etc/php-fpm.d/zz-docker.conf
+
+# Создаем пользователя приложения
+RUN addgroup -g 1000 www && \
+    adduser -u 1000 -G www -s /bin/sh -D www
+
+# Настраиваем права
+RUN mkdir -p /var/www/html && \
+    chown -R www:www /var/www && \
+    chmod -R 755 /var/www
+
+# Копируем конфигурационные файлы
+COPY php/php.ini /usr/local/etc/php/php.ini
+COPY php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+
+# Переключаемся на пользователя приложения
+USER www
+
+# Рабочая директория
 WORKDIR /var/www/html
 
-USER www-data
+# Открываем порт PHP-FPM
+EXPOSE 9000
+
+# Запускаем PHP-FPM
+CMD ["php-fpm", "-F"]

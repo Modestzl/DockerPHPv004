@@ -1,0 +1,14 @@
+{
+  "name": "vendor_name/DockerPHPv004",
+  "description": "description",
+  "minimum-stability": "stable",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "adminvrn",
+      "email": "email@example.com"
+    }
+  ],
+  "require": {
+  }
+}
