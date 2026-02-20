@@ -1,31 +1,31 @@
 # Многостадийная сборка для оптимизации
 FROM php:8.2-fpm-alpine AS builder
-
+WORKDIR /var/www/html
 # Устанавливаем системные зависимости
 # Важно: Обновляем индекс и удаляем кэш в одной команде, чтобы не плодить слои
 # RUN apk update && apk add --no-cache curl vim
 # Флаг --no-cache означает, что не нужно сохранять индекс пакетов локально
+FROM php:8.2-fpm-alpine
 
-RUN apk update && apk add --no-cache \
-    git \
-    curl \
-    zlib-dev \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
+# Устанавливаем системные зависимости
+RUN apk add --no-cache \
+    freetype \
     freetype-dev \
-    icu-dev \
-    oniguruma-dev \
-    postgresql-dev \
+    libjpeg-turbo \
+    libjpeg-turbo-dev \
+    libpng \
+    libpng-dev \
     libxml2-dev \
     libxslt-dev \
-    && rm -rf /var/cache/apk/*
-    #  && rm -rf /var/lib/apt/lists/* # Очищаем кэш apt в том же слое
-# Утилита mlocati/docker-php-extension-installer автоматически управляет установкой зависимостей и их последующей очисткой
-# Устанавливаем расширения PHP
+    postgresql-dev \
+    zip \
+    libzip-dev \
+    icu-dev \
+    oniguruma-dev
+
+# Настраиваем и устанавливаем расширения
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
-    docker-php-ext-configure intl && \
-    docker-php-ext-install \
+    docker-php-ext-install -j$(nproc) \
         pdo_mysql \
         pdo_pgsql \
         mysqli \
@@ -40,6 +40,49 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
         sockets \
         opcache \
         xsl
+
+# Очищаем кэш и удаляем dev-пакеты
+RUN apk del freetype-dev libjpeg-turbo-dev libpng-dev libxml2-dev libxslt-dev postgresql-dev libzip-dev icu-dev oniguruma-dev
+
+
+
+
+#RUN apk update && apk add --no-cache \
+#    git \
+#    curl \
+#    zlib-dev \
+#    libzip-dev \
+#    libpng-dev \
+#    libjpeg-turbo-dev \
+#    freetype-dev \
+#    icu-dev \
+#    oniguruma-dev \
+#    postgresql-dev \
+#    libxml2-dev \
+#    libxslt-dev \
+#    && rm -rf /var/cache/apk/*
+#    #  && rm -rf /var/lib/apt/lists/* # Очищаем кэш apt в том же слое используется в не Alpine
+#
+## Существует Утилита mlocati/docker-php-extension-installer автоматически управляет установкой зависимостей и их последующей очисткой
+#
+## Устанавливаем расширения PHP
+#RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
+#    docker-php-ext-configure intl && \
+#    docker-php-ext-install \
+#        pdo_mysql \
+#        pdo_pgsql \
+#        mysqli \
+#        zip \
+#        gd \
+#        intl \
+#        mbstring \
+#        exif \
+#        pcntl \
+#        bcmath \
+#        soap \
+#        sockets \
+#        opcache \
+#        xsl
 
 # Устанавливаем Redis и другие PECL расширения
 RUN pecl install redis && \
